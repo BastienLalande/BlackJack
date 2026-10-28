@@ -1,11 +1,14 @@
 #include "ui.h"
-
 #include "raylib.h"
-
 #include <stdio.h>
 
-#define SCREEN_WIDTH 960
-#define SCREEN_HEIGHT 720
+// Résolution logique de référence (votre jeu est conçu pour ça)
+#define LOGICAL_WIDTH 1280
+#define LOGICAL_HEIGHT 720
+
+// Anciennes macros de dimensions remplacées ou adaptées
+#define SCREEN_WIDTH LOGICAL_WIDTH
+#define SCREEN_HEIGHT LOGICAL_HEIGHT
 
 static const Color TABLE_GREEN_COLOR = {24, 105, 73, 255};
 static const Color DARK_GREEN_COLOR = {15, 75, 53, 255};
@@ -13,9 +16,24 @@ static const Color GOLD_COLOR = {245, 196, 74, 255};
 static const Color CARD_RED_COLOR = {185, 48, 55, 255};
 static const Color TEXT_LIGHT_COLOR = {246, 245, 231, 255};
 
+// RenderTexture pour le redimensionnement virtuel (plein écran propre)
+static RenderTexture2D target = { 0 };
+
+static Vector2 GetVirtualMousePosition(void) {
+    Vector2 mouse = GetMousePosition();
+    float scale = (float)GetScreenWidth() / LOGICAL_WIDTH;
+    if ((float)GetScreenHeight() / LOGICAL_HEIGHT < scale) {
+        scale = (float)GetScreenHeight() / LOGICAL_HEIGHT;
+    }
+    float offsetX = (GetScreenWidth() - (LOGICAL_WIDTH * scale)) * 0.5f;
+    float offsetY = (GetScreenHeight() - (LOGICAL_HEIGHT * scale)) * 0.5f;
+
+    return (Vector2){ (mouse.x - offsetX) / scale, (mouse.y - offsetY) / scale };
+}
+
 static bool point_in_button(Rectangle button)
 {
-    return CheckCollisionPointRec(GetMousePosition(), button);
+    return CheckCollisionPointRec(GetVirtualMousePosition(), button);
 }
 
 static bool clicked_button(Rectangle button)
@@ -84,11 +102,21 @@ static void draw_hand(const Card *hand, size_t count, float y, bool hide_first)
 
 bool ui_init(void)
 {
-    SetConfigFlags(FLAG_MSAA_4X_HINT);
-    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Blackjack");
+    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
+    
+    // Ouvre une fenêtre par défaut en 1280x720 (ou vous pouvez passer en plein écran direct)
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Casino");
+    
+    // Si vous voulez forcer le plein écran dès le lancement, décommentez la ligne ci-dessous :
+    // ToggleFullscreen();
+
     if (!IsWindowReady()) {
         return false;
     }
+
+    // Crée une texture de rendu virtuelle pour garder le ratio et l'affichage propre
+    target = LoadRenderTexture(LOGICAL_WIDTH, LOGICAL_HEIGHT);
+    SetTextureFilter(target.texture, TEXTURE_FILTER_BILINEAR);
 
     SetTargetFPS(60);
     return true;
@@ -96,6 +124,7 @@ bool ui_init(void)
 
 void ui_close(void)
 {
+    UnloadRenderTexture(target);
     CloseWindow();
 }
 
@@ -108,6 +137,11 @@ bool ui_handle_input(Game *game)
 {
     if (IsKeyPressed(KEY_ESCAPE)) {
         return false;
+    }
+
+    // Touche F11 pour basculer en Plein Écran / Fenêtré à tout moment
+    if (IsKeyPressed(KEY_F11)) {
+        ToggleFullscreen();
     }
 
     if (game->phase == GAME_BETTING) {
@@ -128,7 +162,7 @@ bool ui_handle_input(Game *game)
             return game_stand(game);
         }
     } else if (game->phase == GAME_ROUND_OVER
-               && clicked_button((Rectangle){350, 615, 260, 52})) {
+                && clicked_button((Rectangle){350, 615, 260, 52})) {
         if (game->balance == 0) {
             game->balance = 100;
             game->bet = 10;
@@ -145,13 +179,15 @@ bool ui_handle_input(Game *game)
 
 void ui_draw(const Game *game)
 {
-    BeginDrawing();
+    // 1. On dessine dans la texture virtuelle (résolution fixe propre)
+    BeginTextureMode(target);
     ClearBackground(TABLE_GREEN_COLOR);
+    
     DrawRectangle(0, 0, SCREEN_WIDTH, 90, DARK_GREEN_COLOR);
-    DrawText("BLACKJACK", 36, 24, 34, GOLD_COLOR);
+    DrawText("CASINO DE BABA", 36, 24, 34, GOLD_COLOR);
 
     char status[128];
-    snprintf(status, sizeof(status), "Jetons : %d     Victoires : %d     Defaites : %d",
+    snprintf(status, sizeof(status), "Jetons : %d    Victoires : %d    Defaites : %d",
              game->balance, game->wins, game->losses);
     DrawText(status, 405, 35, 18, TEXT_LIGHT_COLOR);
     DrawText("Croupier", 50, 124, 22, TEXT_LIGHT_COLOR);
@@ -201,7 +237,31 @@ void ui_draw(const Game *game)
                     true);
     }
 
-    DrawText("Valeurs : figures = 10, As = 1 ou 11. Le croupier reste a 17.",
-             220, 690, 14, TEXT_LIGHT_COLOR);
+    DrawText("Valeurs : figures = 10, As = 1 ou 11. Le croupier reste a 17. [F11] Plein ecran",
+             200, 690, 14, TEXT_LIGHT_COLOR);
+             
+    EndTextureMode();
+
+    // 2. On affiche la texture étirée et centrée sur l'écran réel (fenêtré ou plein écran)
+    BeginDrawing();
+    ClearBackground(BLACK); // Couleur des bandes noires si le ratio diffère
+
+    float scale = (float)GetScreenWidth() / LOGICAL_WIDTH;
+    float screenHeightRatio = (float)GetScreenHeight() / LOGICAL_HEIGHT;
+    if (screenHeightRatio < scale) {
+        scale = screenHeightRatio;
+    }
+
+    float destWidth = LOGICAL_WIDTH * scale;
+    float destHeight = LOGICAL_HEIGHT * scale;
+    float destX = (GetScreenWidth() - destWidth) * 0.5f;
+    float destY = (GetScreenHeight() - destHeight) * 0.5f;
+
+    Rectangle sourceRec = { 0.0f, 0.0f, (float)target.texture.width, (float)-target.texture.height };
+    Rectangle destRec = { destX, destY, destWidth, destHeight };
+    Vector2 origin = { 0.0f, 0.0f };
+
+    DrawTexturePro(target.texture, sourceRec, destRec, origin, 0.0f, WHITE);
+
     EndDrawing();
 }
