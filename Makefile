@@ -6,20 +6,27 @@ SOURCES = src/main.c src/card.c src/game.c src/ui.c src/save.c
 OBJECTS = $(SOURCES:.c=.o)
 TARGET = blackjack
 
-RAYLIB_CFLAGS := $(shell pkg-config --cflags raylib 2>/dev/null)
-RAYLIB_LIBS := $(shell pkg-config --libs raylib 2>/dev/null)
-
-ifeq ($(strip $(RAYLIB_LIBS)),)
+# Détection et configuration de Raylib selon l'OS
 ifeq ($(OS),Windows_NT)
-RAYLIB_LIBS = -lraylib -lopengl32 -lgdi32 -lwinmm
+    # Configuration Windows (ajustez les chemins si besoin si vous utilisez un autre mode d'installation)
+    RAYLIB_LIBS ?= -lraylib -lopengl32 -lgdi32 -lwinmm
+    RM = del /Q /F
+    FIX_PATH = $(subst /,\,$1)
 else
-RAYLIB_LIBS = -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
-endif
+    # Configuration Linux / macOS
+    RAYLIB_CFLAGS ?= $(shell pkg-config --cflags raylib 2>/dev/null)
+    RAYLIB_LIBS ?= $(shell pkg-config --libs raylib 2>/dev/null)
+    ifeq ($(strip $(RAYLIB_LIBS)),)
+        RAYLIB_LIBS = -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
+    endif
+    RM = rm -f
+    FIX_PATH = $1
 endif
 
 .PHONY: all clean
 
 all: $(TARGET)
+	@$(MAKE) clean-objs
 
 $(TARGET): $(OBJECTS)
 	$(CC) $(LDFLAGS) -o $@ $(OBJECTS) $(RAYLIB_LIBS) $(LDLIBS)
@@ -27,5 +34,8 @@ $(TARGET): $(OBJECTS)
 src/%.o: src/%.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(RAYLIB_CFLAGS) -c $< -o $@
 
+clean-objs:
+	$(RM) $(call FIX_PATH,$(OBJECTS))
+
 clean:
-	$(RM) $(OBJECTS) $(TARGET) $(TARGET).exe
+	$(RM) $(call FIX_PATH,$(OBJECTS) $(TARGET) $(TARGET).exe)
