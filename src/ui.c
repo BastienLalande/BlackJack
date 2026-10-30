@@ -2,11 +2,10 @@
 #include "raylib.h"
 #include <stdio.h>
 
-// Résolution logique de référence (votre jeu est conçu pour ça)
+// Résolution logique de référence
 #define LOGICAL_WIDTH 1280
 #define LOGICAL_HEIGHT 720
 
-// Anciennes macros de dimensions remplacées ou adaptées
 #define SCREEN_WIDTH LOGICAL_WIDTH
 #define SCREEN_HEIGHT LOGICAL_HEIGHT
 
@@ -49,9 +48,9 @@ static void draw_button(Rectangle bounds, const char *label, bool enabled)
 
     DrawRectangleRounded(bounds, 0.18f, 8, background);
     DrawRectangleRoundedLines(bounds, 0.18f, 8, enabled ? GOLD_COLOR : GRAY);
-    int text_width = MeasureText(label, 22);
+    int text_width = MeasureText(label, 20);
     DrawText(label, (int)(bounds.x + (bounds.width - text_width) / 2),
-             (int)(bounds.y + (bounds.height - 22) / 2), 22, foreground);
+             (int)(bounds.y + (bounds.height - 20) / 2), 20, foreground);
 }
 
 static const char *rank_name(int value)
@@ -103,18 +102,12 @@ static void draw_hand(const Card *hand, size_t count, float y, bool hide_first)
 bool ui_init(void)
 {
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
-    
-    // Ouvre une fenêtre par défaut en 1280x720 (ou vous pouvez passer en plein écran direct)
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Casino");
-    
-    // Si vous voulez forcer le plein écran dès le lancement, décommentez la ligne ci-dessous :
-    // ToggleFullscreen();
 
     if (!IsWindowReady()) {
         return false;
     }
 
-    // Crée une texture de rendu virtuelle pour garder le ratio et l'affichage propre
     target = LoadRenderTexture(LOGICAL_WIDTH, LOGICAL_HEIGHT);
     SetTextureFilter(target.texture, TEXTURE_FILTER_BILINEAR);
 
@@ -139,30 +132,39 @@ bool ui_handle_input(Game *game)
         return false;
     }
 
-    // Touche F11 pour basculer en Plein Écran / Fenêtré à tout moment
     if (IsKeyPressed(KEY_F11)) {
         ToggleFullscreen();
     }
 
     if (game->phase == GAME_BETTING) {
-        if (clicked_button((Rectangle){322, 556, 58, 46})) {
+        if (clicked_button((Rectangle){ 470, 560, 65, 45 })) {
             return game_change_bet(game, -10);
         }
-        if (clicked_button((Rectangle){580, 556, 58, 46})) {
+        if (clicked_button((Rectangle){ 545, 560, 45, 45 })) {
+            return game_change_bet(game, -1);
+        }
+        if (clicked_button((Rectangle){ 600, 560, 80, 45 })) {
+            // All In : ajuste la mise au total de la balance
+            return game_change_bet(game, game->balance - game->bet);
+        }
+        if (clicked_button((Rectangle){ 690, 560, 45, 45 })) {
+            return game_change_bet(game, 1);
+        }
+        if (clicked_button((Rectangle){ 745, 560, 65, 45 })) {
             return game_change_bet(game, 10);
         }
-        if (clicked_button((Rectangle){390, 615, 180, 52})) {
+        if (clicked_button((Rectangle){ 540, 620, 200, 50 })) {
             return game_start_round(game);
         }
     } else if (game->phase == GAME_PLAYER_TURN) {
-        if (clicked_button((Rectangle){340, 615, 130, 52})) {
+        if (clicked_button((Rectangle){ 490, 615, 140, 50 })) {
             return game_hit(game);
         }
-        if (clicked_button((Rectangle){490, 615, 130, 52})) {
+        if (clicked_button((Rectangle){ 650, 615, 140, 50 })) {
             return game_stand(game);
         }
     } else if (game->phase == GAME_ROUND_OVER
-                && clicked_button((Rectangle){350, 615, 260, 52})) {
+                && clicked_button((Rectangle){ 500, 615, 280, 50 })) {
         if (game->balance == 0) {
             game->balance = 100;
             game->bet = 10;
@@ -179,7 +181,6 @@ bool ui_handle_input(Game *game)
 
 void ui_draw(const Game *game)
 {
-    // 1. On dessine dans la texture virtuelle (résolution fixe propre)
     BeginTextureMode(target);
     ClearBackground(TABLE_GREEN_COLOR);
     
@@ -192,6 +193,7 @@ void ui_draw(const Game *game)
     DrawText(status, 405, 35, 18, TEXT_LIGHT_COLOR);
     DrawText("Croupier", 50, 124, 22, TEXT_LIGHT_COLOR);
     DrawText("Joueur", 50, 370, 22, TEXT_LIGHT_COLOR);
+    
     draw_hand(game->dealer_hand, game->dealer_count, 155,
               game->phase == GAME_PLAYER_TURN);
     draw_hand(game->player_hand, game->player_count, 405, false);
@@ -207,21 +209,32 @@ void ui_draw(const Game *game)
         DrawText(status, 720, 426, 16, TEXT_LIGHT_COLOR);
     }
 
-    DrawLine(80, 535, 880, 535, (Color){154, 195, 164, 255});
+    DrawLine(150, 535, 1130, 535, (Color){154, 195, 164, 255});
 
     if (game->phase == GAME_BETTING) {
+        // Affichage de la mise courante centrée
         snprintf(status, sizeof(status), "Mise : %d jetons", game->bet);
-        DrawText(status, 392, 552, 22, TEXT_LIGHT_COLOR);
-        draw_button((Rectangle){322, 556, 58, 46}, "-", game->balance > 0);
-        draw_button((Rectangle){580, 556, 58, 46}, "+",
-                    game->balance > game->bet);
-        draw_button((Rectangle){390, 615, 180, 52}, "Distribuer",
+        int text_width = MeasureText(status, 20);
+        DrawText(status, (LOGICAL_WIDTH - text_width) / 2, 532, 20, TEXT_LIGHT_COLOR);
+
+        // Boutons de modification de mise (-10, -1, All In, +1, +10)
+        draw_button((Rectangle){ 470, 560, 65, 45 }, "-10", game->bet >= 10);
+        draw_button((Rectangle){ 545, 560, 45, 45 }, "-1", game->bet >= 1);
+        draw_button((Rectangle){ 600, 560, 80, 45 }, "All In", game->balance > 0 && game->bet < game->balance);
+        draw_button((Rectangle){ 690, 560, 45, 45 }, "+1", game->balance > game->bet);
+        draw_button((Rectangle){ 745, 560, 65, 45 }, "+10", game->balance >= game->bet + 10);
+
+        // Bouton Distribuer
+        draw_button((Rectangle){ 540, 620, 200, 50 }, "Distribuer",
                     game->bet > 0 && game->bet <= game->balance);
+
     } else if (game->phase == GAME_PLAYER_TURN) {
         snprintf(status, sizeof(status), "Mise en jeu : %d jetons", game->bet);
-        DrawText(status, 410, 555, 20, TEXT_LIGHT_COLOR);
-        draw_button((Rectangle){340, 615, 130, 52}, "Tirer", true);
-        draw_button((Rectangle){490, 615, 130, 52}, "Rester", true);
+        int text_width = MeasureText(status, 20);
+        DrawText(status, (LOGICAL_WIDTH - text_width) / 2, 565, 20, TEXT_LIGHT_COLOR);
+
+        draw_button((Rectangle){ 490, 615, 140, 50 }, "Tirer", true);
+        draw_button((Rectangle){ 650, 615, 140, 50 }, "Rester", true);
     } else {
         const char *message = "Manche terminee";
         switch (game->result) {
@@ -231,20 +244,23 @@ void ui_draw(const Game *game)
         case RESULT_BLACKJACK: message = "Blackjack ! Paiement 3:2."; break;
         case RESULT_NONE: break;
         }
-        DrawText(message, 375, 555, 23, GOLD_COLOR);
-        draw_button((Rectangle){350, 615, 260, 52},
+        int msg_width = MeasureText(message, 23);
+        DrawText(message, (LOGICAL_WIDTH - msg_width) / 2, 560, 23, GOLD_COLOR);
+
+        draw_button((Rectangle){ 500, 615, 280, 50 },
                     game->balance == 0 ? "Recevoir 100 jetons" : "Manche suivante",
                     true);
     }
 
-    DrawText("Valeurs : figures = 10, As = 1 ou 11. Le croupier reste a 17. [F11] Plein ecran",
-             200, 690, 14, TEXT_LIGHT_COLOR);
+    const char *footer = "Valeurs : figures = 10, As = 1 ou 11. Le croupier reste a 17. [F11] Plein ecran";
+    int footer_width = MeasureText(footer, 14);
+    DrawText(footer, (LOGICAL_WIDTH - footer_width) / 2, 690, 14, TEXT_LIGHT_COLOR);
              
     EndTextureMode();
 
-    // 2. On affiche la texture étirée et centrée sur l'écran réel (fenêtré ou plein écran)
+    // Affichage final de la texture virtuelle centrée et mise à l'échelle sur l'écran réel
     BeginDrawing();
-    ClearBackground(BLACK); // Couleur des bandes noires si le ratio diffère
+    ClearBackground(BLACK);
 
     float scale = (float)GetScreenWidth() / LOGICAL_WIDTH;
     float screenHeightRatio = (float)GetScreenHeight() / LOGICAL_HEIGHT;

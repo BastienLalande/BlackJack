@@ -15,7 +15,7 @@ typedef enum {
 
 typedef struct {
     Suit suit;
-    int value;
+    int value; // de 1 a 13 (1 AS, 13 Roi)
 } Card;
 
 typedef struct {
