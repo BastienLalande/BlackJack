@@ -5,6 +5,8 @@
 /* Résolution de référence indépendante de la taille réelle de la fenêtre. */
 #define LOGICAL_WIDTH 1280
 #define LOGICAL_HEIGHT 720
+#define RENDER_SCALE 2
+#define WINDOW_ICON_SIZE 64
 
 #define SCREEN_WIDTH LOGICAL_WIDTH
 #define SCREEN_HEIGHT LOGICAL_HEIGHT
@@ -15,7 +17,7 @@ static const Color GOLD_COLOR = {245, 196, 74, 255};
 static const Color CARD_RED_COLOR = {185, 48, 55, 255};
 static const Color TEXT_LIGHT_COLOR = {246, 245, 231, 255};
 
-/* Surface logique rééchantillonnée au moment de l'affichage dans la fenêtre. */
+/* Surface rendue en haute résolution puis réduite à la taille logique à l'écran. */
 static RenderTexture2D target = { 0 };
 
 /* Convertit les coordonnées de souris réelles en coordonnées de la surface logique,
@@ -123,8 +125,24 @@ bool ui_init(void)
         return false;
     }
 
-    /* Le filtrage bilinéaire adoucit l'image lorsque la fenêtre est redimensionnée. */
-    target = LoadRenderTexture(LOGICAL_WIDTH, LOGICAL_HEIGHT);
+    /* Crée une icône de carte en mémoire afin de ne pas dépendre d'un fichier externe. */
+    Image icon = GenImageColor(WINDOW_ICON_SIZE, WINDOW_ICON_SIZE, DARK_GREEN_COLOR);
+    if (icon.data != NULL) {
+        /* Dessine une carte blanche bordée d'or et un losange rouge au centre. */
+        ImageDrawRectangle(&icon, 12, 5, 40, 54, GOLD_COLOR);
+        ImageDrawRectangle(&icon, 15, 8, 34, 48, RAYWHITE);
+        ImageDrawTriangle(&icon, (Vector2){32, 18}, (Vector2){23, 31},
+                          (Vector2){32, 44}, CARD_RED_COLOR);
+        ImageDrawTriangle(&icon, (Vector2){32, 18}, (Vector2){41, 31},
+                          (Vector2){32, 44}, CARD_RED_COLOR);
+        SetWindowIcon(icon);
+        UnloadImage(icon);
+    } else {
+        TraceLog(LOG_WARNING, "Impossible de generer l'icone de la fenetre.");
+    }
+
+    /* Le suréchantillonnage améliore la netteté des textes et des contours au redimensionnement. */
+    target = LoadRenderTexture(LOGICAL_WIDTH * RENDER_SCALE, LOGICAL_HEIGHT * RENDER_SCALE);
     SetTextureFilter(target.texture, TEXTURE_FILTER_BILINEAR);
 
     SetTargetFPS(60);
@@ -206,10 +224,13 @@ void ui_draw(const Game *game)
 {
     /* Toutes les coordonnées et tous les éléments de jeu sont dessinés en taille logique. */
     BeginTextureMode(target);
+    Camera2D render_camera = { 0 };
+    render_camera.zoom = RENDER_SCALE;
+    BeginMode2D(render_camera);
     ClearBackground(TABLE_GREEN_COLOR);
     
     DrawRectangle(0, 0, SCREEN_WIDTH, 90, DARK_GREEN_COLOR);
-    DrawText("CASINO DE BABA", 36, 24, 34, GOLD_COLOR);
+    DrawText("C CASINO", 36, 24, 34, GOLD_COLOR);
 
     char status[128];
     snprintf(status, sizeof(status), "Jetons : %d    Victoires : %d    Defaites : %d",
@@ -234,7 +255,7 @@ void ui_draw(const Game *game)
         DrawText(status, 720, 426, 16, TEXT_LIGHT_COLOR);
     }
 
-    DrawLine(150, 535, 1130, 535, (Color){154, 195, 164, 255});
+    DrawLine(150, 520, 1130, 520, (Color){154, 195, 164, 255});
 
     if (game->phase == GAME_BETTING) {
         // Affichage de la mise courante centrée
@@ -282,6 +303,7 @@ void ui_draw(const Game *game)
     int footer_width = MeasureText(footer, 14);
     DrawText(footer, (LOGICAL_WIDTH - footer_width) / 2, 690, 14, TEXT_LIGHT_COLOR);
              
+    EndMode2D();
     EndTextureMode();
 
     /* Affiche la texture logique centrée, avec une échelle uniforme sur l'écran réel. */
