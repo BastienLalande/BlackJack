@@ -12,6 +12,7 @@ ifeq ($(OS),Windows_NT)
     RAYLIB_LIBS ?= -lraylib -lopengl32 -lgdi32 -lwinmm
     RM = del /Q /F
     FIX_PATH = $(subst /,\,$1)
+    RUN_TARGET = .\$(TARGET).exe
 else
     # Configuration Linux / macOS
     RAYLIB_CFLAGS ?= $(shell pkg-config --cflags raylib 2>/dev/null)
@@ -21,12 +22,14 @@ else
     endif
     RM = rm -f
     FIX_PATH = $1
+    RUN_TARGET = ./$(TARGET)
 endif
 
-.PHONY: all clean
+.PHONY: all clean clean-objs run
 
 all: $(TARGET)
 	@$(MAKE) clean-objs
+	@$(RUN_TARGET)
 
 $(TARGET): $(OBJECTS)
 	$(CC) $(LDFLAGS) -o $@ $(OBJECTS) $(RAYLIB_LIBS) $(LDLIBS)

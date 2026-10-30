@@ -2,7 +2,7 @@
 #include "raylib.h"
 #include <stdio.h>
 
-// Résolution logique de référence
+/* Résolution de référence indépendante de la taille réelle de la fenêtre. */
 #define LOGICAL_WIDTH 1280
 #define LOGICAL_HEIGHT 720
 
@@ -15,11 +15,14 @@ static const Color GOLD_COLOR = {245, 196, 74, 255};
 static const Color CARD_RED_COLOR = {185, 48, 55, 255};
 static const Color TEXT_LIGHT_COLOR = {246, 245, 231, 255};
 
-// RenderTexture pour le redimensionnement virtuel (plein écran propre)
+/* Surface logique rééchantillonnée au moment de l'affichage dans la fenêtre. */
 static RenderTexture2D target = { 0 };
 
+/* Convertit les coordonnées de souris réelles en coordonnées de la surface logique,
+   en tenant compte de la mise à l'échelle et des bandes de centrage. */
 static Vector2 GetVirtualMousePosition(void) {
     Vector2 mouse = GetMousePosition();
+    /* Choisit l'échelle uniforme la plus grande qui tient dans la fenêtre. */
     float scale = (float)GetScreenWidth() / LOGICAL_WIDTH;
     if ((float)GetScreenHeight() / LOGICAL_HEIGHT < scale) {
         scale = (float)GetScreenHeight() / LOGICAL_HEIGHT;
@@ -27,22 +30,27 @@ static Vector2 GetVirtualMousePosition(void) {
     float offsetX = (GetScreenWidth() - (LOGICAL_WIDTH * scale)) * 0.5f;
     float offsetY = (GetScreenHeight() - (LOGICAL_HEIGHT * scale)) * 0.5f;
 
+    /* Retire le décalage d'affichage puis inverse la mise à l'échelle. */
     return (Vector2){ (mouse.x - offsetX) / scale, (mouse.y - offsetY) / scale };
 }
 
+/* Vérifie si la souris logique est à l'intérieur du rectangle d'un bouton. */
 static bool point_in_button(Rectangle button)
 {
     return CheckCollisionPointRec(GetVirtualMousePosition(), button);
 }
 
+/* Signale un clic gauche sur un bouton uniquement si le curseur le survole. */
 static bool clicked_button(Rectangle button)
 {
     return point_in_button(button) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
 }
 
+/* Dessine un bouton avec un état visuel adapté au survol et à sa disponibilité. */
 static void draw_button(Rectangle bounds, const char *label, bool enabled)
 {
     bool hovered = point_in_button(bounds);
+    /* Les boutons désactivés sont grisés ; les boutons actifs réagissent au survol. */
     Color background = enabled ? (hovered ? GOLD_COLOR : DARK_GREEN_COLOR) : (Color){80, 85, 82, 255};
     Color foreground = enabled && hovered ? DARK_GREEN_COLOR : TEXT_LIGHT_COLOR;
 
@@ -53,6 +61,7 @@ static void draw_button(Rectangle bounds, const char *label, bool enabled)
              (int)(bounds.y + (bounds.height - 20) / 2), 20, foreground);
 }
 
+/* Retourne l'abréviation affichée pour un rang, ou '?' pour une valeur invalide. */
 static const char *rank_name(int value)
 {
     static const char *names[] = {
@@ -61,18 +70,21 @@ static const char *rank_name(int value)
     return value >= 1 && value <= 13 ? names[value] : "?";
 }
 
+/* Retourne l'abréviation affichée pour une enseigne, ou '?' si elle est invalide. */
 static const char *suit_name(Suit suit)
 {
     static const char *names[] = {"C", "D", "P", "T"};
     return suit >= COEUR && suit <= TREFLE ? names[suit] : "?";
 }
 
+/* Dessine une carte visible ou son dos lorsqu'elle doit rester cachée. */
 static void draw_card(Card card, float x, float y, bool hidden)
 {
     const float width = 70;
     const float height = 100;
 
     if (hidden) {
+        /* Le dos ne révèle ni le rang ni l'enseigne de la carte. */
         DrawRectangleRounded((Rectangle){x, y, width, height}, 0.12f, 8, DARK_GREEN_COLOR);
         DrawRectangleRoundedLines((Rectangle){x, y, width, height}, 0.12f, 8, GOLD_COLOR);
         DrawText("?", (int)x + 25, (int)y + 32, 32, GOLD_COLOR);
@@ -87,6 +99,7 @@ static void draw_card(Card card, float x, float y, bool hidden)
     DrawText(rank_name(card.value), (int)x + 48, (int)y + 70, 18, ink);
 }
 
+/* Centre une main horizontalement et dessine ses cartes avec un espacement constant. */
 static void draw_hand(const Card *hand, size_t count, float y, bool hide_first)
 {
     const float card_width = 70;
@@ -94,11 +107,13 @@ static void draw_hand(const Card *hand, size_t count, float y, bool hide_first)
     float total_width = count == 0 ? 0 : card_width + (float)(count - 1) * spacing;
     float x = (SCREEN_WIDTH - total_width) / 2;
 
+    /* La seconde carte (index 1) du croupier est masquée pendant le tour du joueur. */
     for (size_t i = 0; i < count; ++i) {
         draw_card(hand[i], x + (float)i * spacing, y, hide_first && i == 1);
     }
 }
 
+/* Configure Raylib, ouvre la fenêtre et crée la texture de rendu logique. */
 bool ui_init(void)
 {
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
@@ -108,6 +123,7 @@ bool ui_init(void)
         return false;
     }
 
+    /* Le filtrage bilinéaire adoucit l'image lorsque la fenêtre est redimensionnée. */
     target = LoadRenderTexture(LOGICAL_WIDTH, LOGICAL_HEIGHT);
     SetTextureFilter(target.texture, TEXTURE_FILTER_BILINEAR);
 
@@ -115,19 +131,23 @@ bool ui_init(void)
     return true;
 }
 
+/* Libère la texture de rendu et ferme la fenêtre Raylib. */
 void ui_close(void)
 {
     UnloadRenderTexture(target);
     CloseWindow();
 }
 
+/* Demande à Raylib si la fermeture de la fenêtre a été demandée. */
 bool ui_should_close(void)
 {
     return WindowShouldClose();
 }
 
+/* Traduit les touches et clics en actions métier ; true indique un état à sauvegarder. */
 bool ui_handle_input(Game *game)
 {
+    /* Échap laisse la fermeture à la boucle principale ; F11 bascule le plein écran. */
     if (IsKeyPressed(KEY_ESCAPE)) {
         return false;
     }
@@ -137,6 +157,7 @@ bool ui_handle_input(Game *game)
     }
 
     if (game->phase == GAME_BETTING) {
+        /* Les boutons modifient la mise ; seule une action métier réussie est signalée. */
         if (clicked_button((Rectangle){ 470, 560, 65, 45 })) {
             return game_change_bet(game, -10);
         }
@@ -144,7 +165,7 @@ bool ui_handle_input(Game *game)
             return game_change_bet(game, -1);
         }
         if (clicked_button((Rectangle){ 600, 560, 80, 45 })) {
-            // All In : ajuste la mise au total de la balance
+            /* Le montant ajouté fait passer la mise courante au solde total. */
             return game_change_bet(game, game->balance - game->bet);
         }
         if (clicked_button((Rectangle){ 690, 560, 45, 45 })) {
@@ -165,6 +186,7 @@ bool ui_handle_input(Game *game)
         }
     } else if (game->phase == GAME_ROUND_OVER
                 && clicked_button((Rectangle){ 500, 615, 280, 50 })) {
+        /* Après une banqueroute, le bouton de manche suivante accorde un nouveau départ. */
         if (game->balance == 0) {
             game->balance = 100;
             game->bet = 10;
@@ -179,8 +201,10 @@ bool ui_handle_input(Game *game)
     return false;
 }
 
+/* Dessine le tapis, les mains, les informations et les commandes selon la phase de jeu. */
 void ui_draw(const Game *game)
 {
+    /* Toutes les coordonnées et tous les éléments de jeu sont dessinés en taille logique. */
     BeginTextureMode(target);
     ClearBackground(TABLE_GREEN_COLOR);
     
@@ -198,6 +222,7 @@ void ui_draw(const Game *game)
               game->phase == GAME_PLAYER_TURN);
     draw_hand(game->player_hand, game->player_count, 405, false);
 
+    /* Le total du croupier reste caché tant que le joueur peut encore agir. */
     if (game->dealer_count > 0 && game->phase != GAME_PLAYER_TURN) {
         snprintf(status, sizeof(status), "Total du croupier : %d",
                  game_hand_value(game->dealer_hand, game->dealer_count));
@@ -236,6 +261,7 @@ void ui_draw(const Game *game)
         draw_button((Rectangle){ 490, 615, 140, 50 }, "Tirer", true);
         draw_button((Rectangle){ 650, 615, 140, 50 }, "Rester", true);
     } else {
+        /* Affiche le texte correspondant à l'issue enregistrée par le moteur de jeu. */
         const char *message = "Manche terminee";
         switch (game->result) {
         case RESULT_PLAYER_WIN: message = "Vous gagnez !"; break;
@@ -258,12 +284,13 @@ void ui_draw(const Game *game)
              
     EndTextureMode();
 
-    // Affichage final de la texture virtuelle centrée et mise à l'échelle sur l'écran réel
+    /* Affiche la texture logique centrée, avec une échelle uniforme sur l'écran réel. */
     BeginDrawing();
     ClearBackground(BLACK);
 
     float scale = (float)GetScreenWidth() / LOGICAL_WIDTH;
     float screenHeightRatio = (float)GetScreenHeight() / LOGICAL_HEIGHT;
+    /* Conserve les proportions en limitant l'échelle à la dimension la plus contraignante. */
     if (screenHeightRatio < scale) {
         scale = screenHeightRatio;
     }
@@ -279,5 +306,6 @@ void ui_draw(const Game *game)
 
     DrawTexturePro(target.texture, sourceRec, destRec, origin, 0.0f, WHITE);
 
+    /* Présente l'image complète à l'écran. */
     EndDrawing();
 }
